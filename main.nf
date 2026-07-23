@@ -19,21 +19,21 @@ if (params.debug) {
 }
 
 def bam_dir = [
-    c_elegans   : 'some path',
-    c_tropicalis: 'some path',
-    c_briggsae  : 'some path'
+    c_elegans   : '/vast/eande106/data/c_elegans/WI/alignments',
+    c_tropicalis: '/vast/eande106/data/c_tropicalis/WI/alignments',
+    c_briggsae  : '/vast/eande106/data/c_briggsae/WI/alignments'
 ]
 
 def ref_genome = [
-    c_elegans   : 'some path',
-    c_tropicalis: 'some path',
-    c_briggsae  : 'some path'
+    c_elegans   : '/vast/eande106/data/c_elegans/genomes/PRJNA13758/WS283/c_elegans.PRJNA13758.WS283.genome.fa',
+    c_tropicalis: '/vast/eande106/data/c_tropicalis/genomes/NIC58_nanopore/June2021/c_tropicalis.NIC58_nanopore.June2021.genome.fa',
+    c_briggsae  : '/vast/eande106/data/c_briggsae/genomes/QX1410_nanopore/Feb2020/c_briggsae.QX1410_nanopore.Feb2020.genome.fa'
 ]
 
 def ref_vcf = [
-    c_elegans   : 'some path',
-    c_tropicalis: 'some path',
-    c_briggsae  : 'some path'
+    c_elegans   : '/vast/eande106/data/c_elegans/WI/variation/20250625/vcf/WI.20250625.hard-filter.isotype.vcf.gz',
+    c_tropicalis: '/vast/eande106/data/c_tropicalis/WI/variation/20250627/vcf/WI.20250627.hard-filter.isotype.vcf.gz',
+    c_briggsae  : '/vast/eande106/data/c_briggsae/WI/variation/20250626/vcf/WI.20250626.hard-filter.isotype.vcf.gz'
 ]
 
 def invcf = params.vcf ?: ref_vcf[params.species]
@@ -52,8 +52,6 @@ def log_summary() {
         exit 1
     }
 }
-
-
 
 workflow {
 
@@ -100,9 +98,12 @@ workflow {
     varct_ch    = MERGE_VARIANT_COUNTS.out.merged_counts
 
     CALL_HDRS(
-        coverage_ch,
-        varct_ch,
-        ch_windows
+        MERGE_THRESHOLDS.out.merged_thresholds,
+        MERGE_VARIANT_COUNTS.out.merged_counts,
+        ch_windows,
+        params.refstrain,
+        params.covthresh,
+        params.vcthresh
     )
 
 }
@@ -132,7 +133,7 @@ process GENERATE_SAMPLE_LIST_AND_WINDOWS {
 }
 
 process COUNT_VARIANTS_PER_WINDOW {
-    tag "${strain}"
+    tag "${strain}_var"
     label ''
     container 'quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
 
@@ -154,7 +155,7 @@ process COUNT_VARIANTS_PER_WINDOW {
 }
 
 process MERGE_VARIANT_COUNTS {
-    tag "sample_merge"
+    tag "merge_var"
     label ''
     container 'quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
 
@@ -174,7 +175,7 @@ process MERGE_VARIANT_COUNTS {
 }
 
 process MOSDEPTH_COVERAGE {
-    tag "${strain}"
+    tag "${strain}_cov"
     label ''
     container 'quay.io/biocontainers/mosdepth:0.3.8--hd299d5a_0'
 
@@ -214,17 +215,20 @@ process MERGE_THRESHOLDS {
 }
 
 process CALL_HDRS {
-    tag "merge_thresh"
-    label ''
+    tag "call_hdrs"
+    label 'process_medium'
     container ''
 
     input:
     path coverage_df
     path varct_df
     path bins_1kb_stripped
+    val refstrain
+    val covthresh
+    val vcthresh
 
     output:
-    path "hdrs.tsv"
+    path "hdrs.tsv", emit: hdrs
 
     script:
     """
@@ -232,8 +236,8 @@ process CALL_HDRS {
         ${coverage_df} \
         ${varct_df} \
         ${bins_1kb_stripped} \
-        ${params.refstrain} \
-        ${params.covthresh} \
-        ${params.vcthresh}
+        ${refstrain} \
+        ${covthresh} \
+        ${vcthresh}
     """
 }
