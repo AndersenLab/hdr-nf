@@ -1,0 +1,13 @@
+FROM mambaorg/micromamba:1.5.8
+
+USER root
+
+RUN micromamba install -y -n base -c bioconda -c conda-forge \
+    bcftools=1.24 \
+    samtools=1.24 \
+    bedtools=2.31.1 \
+    && micromamba clean --all --yes
+
+ENV PATH="/opt/conda/bin:$PATH"
+
+RUN bcftools --version && samtools --version && bedtools --version
