@@ -111,8 +111,8 @@ workflow {
 
 process GENERATE_SAMPLE_LIST_AND_WINDOWS {
     tag "${invcf.simpleName}"
-    label ''
-    container 'quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
+    label 'process_low'
+    container 'docker://quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
 
     input:
     path invcf
@@ -134,8 +134,8 @@ process GENERATE_SAMPLE_LIST_AND_WINDOWS {
 
 process COUNT_VARIANTS_PER_WINDOW {
     tag "${strain}_var"
-    label ''
-    container 'quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
+    label 'process_med'
+    container 'docker://quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
 
     input:
     val strain
@@ -156,8 +156,9 @@ process COUNT_VARIANTS_PER_WINDOW {
 
 process MERGE_VARIANT_COUNTS {
     tag "merge_var"
-    label ''
-    container 'quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
+    label 'process_low'
+    publishDir "${params.output}", mode: 'copy'
+    container 'docker://quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
 
     input:
     path variant_count_files
@@ -176,8 +177,8 @@ process MERGE_VARIANT_COUNTS {
 
 process MOSDEPTH_COVERAGE {
     tag "${strain}_cov"
-    label ''
-    container 'quay.io/biocontainers/mosdepth:0.3.8--hd299d5a_0'
+    label 'process_med'
+    container 'docker://quay.io/biocontainers/mosdepth:0.3.8--hd299d5a_0'
 
     input:
     val strain
@@ -196,8 +197,9 @@ process MOSDEPTH_COVERAGE {
 
 process MERGE_THRESHOLDS {
     tag "merge_thresh"
-    label ''
-    container 'quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
+    label 'process_low'
+    publishDir "${params.output}", mode: 'copy'
+    container 'docker://quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
 
     input:
     path threshold_files
@@ -216,8 +218,9 @@ process MERGE_THRESHOLDS {
 
 process CALL_HDRS {
     tag "call_hdrs"
-    label 'process_medium'
-    container ''
+    label 'process_med'
+    publishDir "${params.output}", mode: 'copy'
+    container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
 
     input:
     path coverage_df
@@ -232,6 +235,7 @@ process CALL_HDRS {
 
     script:
     """
+    export OMP_NUM_THREADS=${task.cpus}
     Rscript call_hdr.R \
         ${coverage_df} \
         ${varct_df} \
