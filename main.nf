@@ -57,9 +57,9 @@ def var_thresh = [
 def invcf = params.vcf ?: ref_vcf[params.species]
 def ingenome = params.reference ?: ref_genome[params.species]
 def inbam = params.bam ?: bam_dir[params.species]
-def refstrain = prams.ref ?: ref_str[params.species]
-def covtresh = params.pbt ?: cov_thresh[params.species]
-def vcthresh = params.vct ?: var_threshp[params.species]
+def refstrain = params.ref ?: ref_str[params.species]
+def covthresh = params.pbt ?: cov_thresh[params.species]
+def vcthresh = params.vct ?: var_thresh[params.species]
 
 if (covthresh == null || vcthresh == null) {
     error "Thresholds not defined for species: ${params.species}"
@@ -126,22 +126,22 @@ workflow {
         MERGE_THRESHOLDS.out.merged_thresholds,
         MERGE_VARIANT_COUNTS.out.merged_counts,
         ch_windows,
-        params.refstrain,
-        params.covthresh,
-        params.vcthresh
+        refstrain,
+        covthresh,
+        vcthresh
     )
 
 }
 
 
 process GENERATE_SAMPLE_LIST_AND_WINDOWS {
-    tag "${invcf.simpleName}"
+    tag "${vcf_file.simpleName}"
     label 'process_low'
-    container 'docker://quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
+    container 'docker://nicmoya/bedvcf_hdr_image:2026_07_24'
 
     input:
-    path invcf
-    path ingenome
+    path vcf_file
+    path genome_file
 
     output:
     path "samples.txt",  emit: sample_list
@@ -149,10 +149,10 @@ process GENERATE_SAMPLE_LIST_AND_WINDOWS {
 
     script:
     """
-    bcftools query -l ${invcf} > samples.txt
+    bcftools query -l ${vcf_file} > samples.txt
 
-    samtools faidx ${ingenome}
-    cut -f1,2 ${ingenome}.fai > genome.txt
+    samtools faidx ${genome_file}
+    cut -f1,2 ${genome_file}.fai > genome.txt
     bedtools makewindows -g genome.txt -w 1000 > windows.bed
     """
 }
@@ -160,11 +160,11 @@ process GENERATE_SAMPLE_LIST_AND_WINDOWS {
 process COUNT_VARIANTS_PER_WINDOW {
     tag "${strain}_var"
     label 'process_med'
-    container 'docker://quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
+    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
 
     input:
     val strain
-    path invcf
+    path vcf_file
     path windows_bed
 
     output:
@@ -172,7 +172,7 @@ process COUNT_VARIANTS_PER_WINDOW {
 
     script:
     """
-    bcftools view -s ${strain} ${invcf} | \
+    bcftools view -s ${strain} ${vcf_file} | \
         bcftools filter -i 'GT="alt"' -Oz -o ${strain}.vcf.gz
 
     bedtools coverage -a ${windows_bed} -b ${strain}.vcf.gz -counts > ${strain}.variant_counts.tsv
@@ -183,7 +183,7 @@ process MERGE_VARIANT_COUNTS {
     tag "merge_var"
     label 'process_low'
     publishDir "${params.output}", mode: 'copy'
-    container 'docker://quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
+    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
 
     input:
     path variant_count_files
@@ -203,7 +203,7 @@ process MERGE_VARIANT_COUNTS {
 process MOSDEPTH_COVERAGE {
     tag "${strain}_cov"
     label 'process_med'
-    container 'docker://quay.io/biocontainers/mosdepth:0.3.8--hd299d5a_0'
+    container 'docker://docker.io/nicmoya/mosdepth_hdr_image:2026_07_24'
 
     input:
     val strain
@@ -224,7 +224,7 @@ process MERGE_THRESHOLDS {
     tag "merge_thresh"
     label 'process_low'
     publishDir "${params.output}", mode: 'copy'
-    container 'docker://quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127e1b5a6d81d97e2b7e4d53b3b6b0fe1e6023e-0'
+    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
 
     input:
     path threshold_files
