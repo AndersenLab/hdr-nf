@@ -6,7 +6,7 @@ nextflow.enable.dsl=2
 */
 
 date = new Date().format('yyyyMMdd')
-log.info("Source: ${params.source}.")
+log.info("Species: ${params.species}.")
 
 if (params.debug) {
     println """
