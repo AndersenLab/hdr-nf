@@ -137,7 +137,8 @@ workflow {
 process GENERATE_SAMPLE_LIST_AND_WINDOWS {
     tag "${vcf_file.simpleName}"
     label 'process_low'
-    container 'docker://nicmoya/bedvcf_hdr_image:2026_07_24'
+    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    beforeScript   = 'module load singularity'
 
     input:
     path vcf_file
@@ -161,6 +162,7 @@ process COUNT_VARIANTS_PER_WINDOW {
     tag "${strain}_var"
     label 'process_med'
     container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    beforeScript   = 'module load singularity'
 
     input:
     val strain
@@ -184,6 +186,7 @@ process MERGE_VARIANT_COUNTS {
     label 'process_low'
     publishDir "${params.output}", mode: 'copy'
     container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    beforeScript   = 'module load singularity'
 
     input:
     path variant_count_files
@@ -204,6 +207,7 @@ process MOSDEPTH_COVERAGE {
     tag "${strain}_cov"
     label 'process_med'
     container 'docker://docker.io/nicmoya/mosdepth_hdr_image:2026_07_24'
+    beforeScript   = 'module load singularity'
 
     input:
     val strain
@@ -225,6 +229,7 @@ process MERGE_THRESHOLDS {
     label 'process_low'
     publishDir "${params.output}", mode: 'copy'
     container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    beforeScript   = 'module load singularity'
 
     input:
     path threshold_files
@@ -246,6 +251,7 @@ process CALL_HDRS {
     label 'process_med'
     publishDir "${params.output}", mode: 'copy'
     container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
+    beforeScript   = 'module load singularity'
 
     input:
     path coverage_df
