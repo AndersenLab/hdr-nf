@@ -219,7 +219,7 @@ process MOSDEPTH_COVERAGE {
 
     script:
     """
-    mosdepth ${strain} ${bam_dir}/${strain}.bam -b ${windows_bed} -t 4 -T 1,2,5 -n
+    mosdepth -b ${windows_bed} -t 4 -T 1,2,5 -n ${strain} ${bam_dir}/${strain}.bam
     gunzip ${strain}.thresholds.bed.gz
     """
 }
