@@ -42,10 +42,28 @@ def ref_str = [
     c_briggsae  : 'QX1410'
 ]
 
+def cov_thresh = [
+    c_elegans   : '0.8',
+    c_tropicalis: '0.9',
+    c_briggsae  : '0.9'
+]
+
+def var_thresh = [
+    c_elegans   : '11',
+    c_tropicalis: '9',
+    c_briggsae  : '11'
+]
+
 def invcf = params.vcf ?: ref_vcf[params.species]
 def ingenome = params.reference ?: ref_genome[params.species]
 def inbam = params.bam ?: bam_dir[params.species]
 def refstrain = prams.ref ?: ref_str[params.species]
+def covtresh = params.pbt ?: cov_thresh[params.species]
+def vcthresh = params.vct ?: var_threshp[params.species]
+
+if (covthresh == null || vcthresh == null) {
+    error "Thresholds not defined for species: ${params.species}"
+}
 
 def log_summary() {
     // Corrected log summary function to print information instead of recursive call
