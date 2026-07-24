@@ -3,7 +3,7 @@ FROM mambaorg/micromamba:1.5.8
 USER root
 
 RUN micromamba install -y -n base -c bioconda -c conda-forge \
-    mosdepth=0.3.14 \
+    mosdepth=0.2.6 \
     && micromamba clean --all --yes
 
 ENV PATH="/opt/conda/bin:$PATH"
