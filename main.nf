@@ -36,9 +36,16 @@ def ref_vcf = [
     c_briggsae  : '/vast/eande106/data/c_briggsae/WI/variation/20250626/vcf/WI.20250626.hard-filter.isotype.vcf.gz'
 ]
 
+def ref_str = [
+    c_elegans   : 'N2',
+    c_tropicalis: 'NIC58',
+    c_briggsae  : 'QX1410'
+]
+
 def invcf = params.vcf ?: ref_vcf[params.species]
 def ingenome = params.reference ?: ref_genome[params.species]
 def inbam = params.bam ?: bam_dir[params.species]
+def refstrain = prams.ref ?: ref_str[params.species]
 
 def log_summary() {
     // Corrected log summary function to print information instead of recursive call
