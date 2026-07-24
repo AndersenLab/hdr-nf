@@ -211,7 +211,7 @@ process MOSDEPTH_COVERAGE {
 
     input:
     val strain
-    path bam_dir
+    path bamdir
     path windows_bed
 
     output:
@@ -219,7 +219,7 @@ process MOSDEPTH_COVERAGE {
 
     script:
     """
-    mosdepth -b ${windows_bed} -t 4 -T 1,2,5 -n ${strain} ${bam_dir}/${strain}.bam
+    mosdepth -b ${windows_bed} -t 4 -T 1,2,5 -n ${strain} ${bamdir}/${strain}.bam
     gunzip ${strain}.thresholds.bed.gz
     """
 }
@@ -267,7 +267,7 @@ process CALL_HDRS {
     script:
     """
     export OMP_NUM_THREADS=${task.cpus}
-    Rscript call_hdr.R \
+    call_hdr.R \
         ${coverage_df} \
         ${varct_df} \
         ${bins_1kb_stripped} \
