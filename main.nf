@@ -55,9 +55,9 @@ def var_thresh = [
 ]
 
 def invcf = params.vcf ?: ref_vcf[params.species]
-def ingenome = params.reference ?: ref_genome[params.species]
+def ingenome = params.refgen ?: ref_genome[params.species]
 def inbam = params.bam ?: bam_dir[params.species]
-def refstrain = params.ref ?: ref_str[params.species]
+def refstrain = params.str ?: ref_str[params.species]
 def covthresh = params.pbt ?: cov_thresh[params.species]
 def vcthresh = params.vct ?: var_thresh[params.species]
 
