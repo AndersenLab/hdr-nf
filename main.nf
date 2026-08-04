@@ -61,6 +61,17 @@ def refstrain = params.ref ?: ref_str[params.species]
 def covthresh = params.pbt ?: cov_thresh[params.species]
 def vcthresh = params.vct ?: var_thresh[params.species]
 
+def paramSummary = [
+    'Species'       : params.species,
+    'VCF'           : invcf,
+    'Reference genome'     : ingenome,
+    'BAM directory' : inbam,
+    'REF strain'    : refstrain,
+    'Coverage threshold' : covthresh,
+    'Variant threshold' : vcthresh,
+    'Output directory'    : params.output
+]
+
 if (covthresh == null || vcthresh == null) {
     error "Thresholds not defined for species: ${params.species}"
 }
@@ -78,8 +89,21 @@ def log_summary() {
     }
 }
 
-workflow {
+def maxLen = paramSummary.keySet().collect { k -> k.size() }.max()
+    def summary = paramSummary.collect { k, v ->
+        "${k.padRight(maxLen)} : ${v}"
+    }.join('\n    ')
 
+    log.info """
+    =========================================
+      Pipeline Parameters
+    =========================================
+    ${summary}
+    =========================================
+    """.stripIndent()
+
+workflow {
+    
     ch_vcf    = channel.fromPath(invcf, checkIfExists: true)
     ch_genome = channel.fromPath(ingenome, checkIfExists: true)
     ch_bam_dir = channel.fromPath(inbam, checkIfExists: true)
@@ -184,7 +208,7 @@ process COUNT_VARIANTS_PER_WINDOW {
 process MERGE_VARIANT_COUNTS {
     tag "merge_var"
     label 'process_low'
-    publishDir "${params.output}", mode: 'copy'
+    publishDir "${params.output}/variants", mode: 'copy'
     container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
     beforeScript   = 'module load singularity'
 
@@ -227,7 +251,7 @@ process MOSDEPTH_COVERAGE {
 process MERGE_THRESHOLDS {
     tag "merge_thresh"
     label 'process_low'
-    publishDir "${params.output}", mode: 'copy'
+    publishDir "${params.output}/coverage", mode: 'copy'
     container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
     beforeScript   = 'module load singularity'
 
@@ -249,7 +273,7 @@ process MERGE_THRESHOLDS {
 process CALL_HDRS {
     tag "call_hdrs"
     label 'process_med'
-    publishDir "${params.output}", mode: 'copy'
+    publishDir "${params.output}/hdrs", mode: 'copy'
     container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
     beforeScript   = 'module load singularity'
 

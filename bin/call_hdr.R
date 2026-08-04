@@ -150,17 +150,19 @@ bins_1kb_CB_stripped <- readr::read_tsv(
 coverage_df <- readr::read_table(
   coverage_file,
   col_names = c(
-    "CHROM", "START_BIN", "END_BIN", "NAME",
-    "c1X", "c2X", "c5X", "STRAIN"
+    "STRAIN","CHROM", "START_BIN", "END_BIN", "NAME",
+    "c1X", "c2X", "c5X"
   )
 )
 
 varct_df <- readr::read_table(
   varct_file,
   col_names = c(
-    "CHROM", "START_BIN", "END_BIN", "COUNT", "STRAIN"
+    "STRAIN","CHROM", "START_BIN", "END_BIN", "COUNT"
   )
 )
+
+strainL <- varct_df %>% dplyr::distinct(STRAIN) %>% dplyr::pull(STRAIN)
 
 #merge bin-based variant counts and coverage data
 SR_stats_WI <- varct_df %>%
@@ -186,7 +188,7 @@ all_stats <- SR_stats_WI %>%
   dplyr::mutate(div_class=ifelse(div==div_gf,div_class,"G")) %>% #assign a classification to gaps
   dplyr::ungroup()
 
-  #cluster bins (no frequency filter)
+#cluster bins (no frequency filter)
 regList <- list()
 binList <- list()
 for (i in 1:length(strainL)) {
@@ -262,7 +264,7 @@ gap_clust <- all_calls_SR_noREF %>%
   dplyr::mutate(dec3g=ifelse(is.na(dec3g),"nojoin",dec3g)) %>%
   dplyr::ungroup()
 
-#get flagged and merged them
+#get flagged and merge them
 joinClust <- gap_clust %>% 
   dplyr::filter(dec3g=="join") %>%
   dplyr::group_by(STRAIN,CHROM) %>%
@@ -292,6 +294,14 @@ joinClust <- gap_clust %>%
   dplyr::rename(minStart=newStart,maxEnd=newEnd,divSize=newDivSize,meanVC=newMeanVC,meanCF=newMeanCF,bin_foot=clust_foot) %>%
   dplyr::select(CHROM,minStart,maxEnd,divSize,meanVC,meanCF,bin_foot,STRAIN,nclust)
 
+#keep unflagged 
+nojoin <- gap_clust %>%
+  dplyr::group_by(STRAIN,CHROM) %>%
+  dplyr::filter(!(dec3g=="join")) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(CHROM,minStart,maxEnd,divSize,meanVC,meanCF,bin_foot,STRAIN) %>%
+  dplyr::mutate(nclust=1)
+
 #bind unflagged and merged calls, arrange strains by number of HDRs
 all_calls_SR_clustered <- rbind(joinClust,nojoin) %>%
   dplyr::group_by(STRAIN) %>%
@@ -305,6 +315,8 @@ all_calls_SR_clustered <- rbind(joinClust,nojoin) %>%
   dplyr::ungroup() 
 
 all_calls_SR_clustered_sfilt <- all_calls_SR_clustered %>%
-  dplyr::filter(divSize >= 5e3)
+  dplyr::filter(divSize >= 5e3) %>%
+  dplyr::select(-nclust,-ncalls,-sorter,-rleID,-ystrain) %>%
+  dplyr::select(CHROM,start=minStart,end=maxEnd,STRAIN,size=divSize,meanVC,meanCF,bin_footprint=bin_foot)
 
 write.table(all_calls_SR_clustered_sfilt, "hdrs.tsv",row.names = F,quote = F,sep = '\t')
