@@ -8,7 +8,7 @@
 ║  ██║  ██║██████╔╝██║  ██║     ██║ ╚████║██║
 ║  ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝     ╚═╝  ╚═══╝╚═╝
 ║                                               ║
-║      Hyper Divergent Region Nextflow Pipeline ║
+║    Hyper Divergent Region Nextflow Pipeline   ║
 ║                                               ║
 ╚═══════════════════════════════════════════════╝
 
