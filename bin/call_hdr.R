@@ -10,13 +10,6 @@ library(data.table)
 
 args <- commandArgs(trailingOnly = TRUE)
 
-coverage_file <- args[[1]]
-varct_file    <- args[[2]]
-windows_file  <- args[[3]]
-REF           <- args[[4]]
-COV_thresh    <- as.numeric(args[[5]])
-VC_thresh     <- as.numeric(args[[6]])
-
 # This function intersects g2g long-read alignments with genome bins to extract bin-level coverage and identity 
 # a miriad of bin metrics are calculated (see mutate cluster)
 alignmentPartition <- function(df) {
@@ -137,6 +130,16 @@ clusterBins <- function(df,mode) {
   return(out)
 }
 
+
+coverage_file <- args[[1]]
+varct_file    <- args[[2]]
+windows_file  <- args[[3]]
+REF           <- args[[4]]
+GROUP         <- args[[5]]
+COV_thresh    <- as.numeric(args[[6]])
+VC_thresh     <- as.numeric(args[[7]])
+
+
 bins_1kb_CB_stripped <- readr::read_tsv(
   windows_file,
   col_names = FALSE
@@ -150,17 +153,33 @@ bins_1kb_CB_stripped <- readr::read_tsv(
 coverage_df <- readr::read_table(
   coverage_file,
   col_names = c(
-    "STRAIN","CHROM", "START_BIN", "END_BIN", "NAME",
-    "c1X", "c2X", "c5X"
+    "GROUP",
+    "STRAIN",
+    "CHROM",
+    "START_BIN",
+    "END_BIN",
+    "NAME",
+    "c1X",
+    "c2X",
+    "c5X"
   )
-)
+) %>% 
+dplyr::filter(GROUP == .env$GROUP) %>% 
+dplyr::select(-GROUP)
 
 varct_df <- readr::read_table(
   varct_file,
   col_names = c(
-    "STRAIN","CHROM", "START_BIN", "END_BIN", "COUNT"
+    "GROUP",
+    "STRAIN",
+    "CHROM",
+    "START_BIN",
+    "END_BIN",
+    "COUNT"
   )
-)
+) %>% 
+dplyr::filter(GROUP == .env$GROUP) %>% 
+dplyr::select(-GROUP)
 
 strainL <- varct_df %>% dplyr::distinct(STRAIN) %>% dplyr::pull(STRAIN)
 
