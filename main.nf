@@ -130,8 +130,8 @@ workflow {
             }
 
         ch_group_refs = ch_samples
-            .map { group, strain, vcf, ref, bam, refstrain ->
-                tuple(group, ref, refstrain)
+            .map { group, strain, vcf, ref, bam, group_refstrain ->
+                tuple(group, ref, group_refstrain)
             }
             .unique()
 
@@ -140,7 +140,7 @@ workflow {
         ch_group_metadata = GENERATE_WINDOWS_GROUP.out.windows_bed
 
         ch_samples_for_join = ch_samples
-            .map { group, strain, vcf, ref, bam_path, refstrain ->
+            .map { group, strain, vcf, ref, bam_path, group_refstrain ->
                 tuple(group, strain, vcf, bam_path)
             }
 
@@ -148,15 +148,14 @@ workflow {
             .join(GENERATE_WINDOWS_GROUP.out.windows_bed)
 
         ch_variant_inputs = ch_samples_with_windows
-            .map { group, strain, vcf, bam_path, refstrain, windows ->
+            .map { group, strain, vcf, bam_path, group_refstrain, windows ->
                 tuple(group, strain, vcf, windows)
-                }
-
-        ch_coverage_inputs = ch_samples_with_windows
-            .map { group, strain, vcf, bam_path, refstrain, windows ->
-                tuple(group, strain, bam_path, windows)
             }
 
+        ch_coverage_inputs = ch_samples_with_windows
+            .map { group, strain, vcf, bam_path, group_refstrain, windows ->
+                tuple(group, strain, bam_path, windows)
+            }
 
     } else {
 
@@ -226,7 +225,6 @@ workflow {
 
 }
 
-
 process GENERATE_SAMPLE_LIST_AND_WINDOWS {
     tag "${vcf_file.simpleName}"
     label 'process_low'
@@ -273,30 +271,6 @@ process GENERATE_WINDOWS_GROUP {
     """
 }
 
-
-// process COUNT_VARIANTS_PER_WINDOW {
-//     tag "${strain}_var"
-//     label 'process_med'
-//     container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
-//     beforeScript   = 'module load singularity'
-
-//     input:
-//     val strain
-//     path vcf_file
-//     path windows_bed
-
-//     output:
-//     tuple val(strain), path("${strain}.variant_counts.tsv"), emit: variant_counts
-
-//     script:
-//     """
-//     bcftools view -s ${strain} ${vcf_file} | \
-//         bcftools filter -i 'GT="alt"' -Oz -o ${strain}.vcf.gz
-
-//     bedtools coverage -a ${windows_bed} -b ${strain}.vcf.gz -counts > ${strain}.variant_counts.tsv
-//     """
-// }
-
 process COUNT_VARIANTS_PER_WINDOW {
     tag "${strain}_var"
     label 'process_med'
@@ -324,27 +298,6 @@ process COUNT_VARIANTS_PER_WINDOW {
         > ${strain}.variant_counts.tsv
     """
 }
-
-// process MOSDEPTH_COVERAGE {
-//     tag "${strain}_cov"
-//     label 'process_med'
-//     container 'docker://docker.io/nicmoya/mosdepth_hdr_image:2026_07_24'
-//     beforeScript   = 'module load singularity'
-
-//     input:
-//     val strain
-//     path bamdir
-//     path windows_bed
-
-//     output:
-//     tuple val(strain), path("${strain}.thresholds.bed"), emit: thresholds_bed
-
-//     script:
-//     """
-//     mosdepth -b ${windows_bed} -t 4 -T 1,2,5 -n ${strain} ${bamdir}/${strain}.bam
-//     gunzip ${strain}.thresholds.bed.gz
-//     """
-// }
 
 process MOSDEPTH_COVERAGE {
     tag "${strain}_cov"
