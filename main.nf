@@ -169,7 +169,6 @@ workflow {
         )
 
         ch_shared_windows = GENERATE_SAMPLE_LIST_AND_WINDOWS.out.windows_bed
-            .first()
 
         ch_group_metadata = ch_shared_windows.map { windows ->
             tuple("GLOBAL", refstrain, windows)
@@ -181,20 +180,16 @@ workflow {
                 tuple("GLOBAL", line.trim())
         }
 
-        ch_shared_vcf = ch_vcf.first()
-        ch_shared_bam_dir = ch_bam_dir.first()
-
         ch_variant_inputs = ch_strains
-            .combine(ch_shared_vcf)
+            .combine(ch_vcf)
             .combine(ch_shared_windows)
 
         ch_coverage_inputs = ch_strains
-            .combine(ch_shared_bam_dir)
+            .combine(ch_bam_dir)
             .combine(ch_shared_windows)
  
     }
 
-    
     COUNT_VARIANTS_PER_WINDOW(ch_variant_inputs)
     MOSDEPTH_COVERAGE(ch_coverage_inputs)
 
@@ -210,8 +205,8 @@ workflow {
 
     MERGE_THRESHOLDS(ch_all_thresholds)
 
-    ch_coverage_merged = MERGE_THRESHOLDS.out.merged_thresholds.first()
-    ch_varct_merged    = MERGE_VARIANT_COUNTS.out.merged_counts.first()
+    ch_coverage_merged = MERGE_THRESHOLDS.out.merged_thresholds
+    ch_varct_merged = MERGE_VARIANT_COUNTS.out.merged_counts
 
     ch_hdr_inputs = ch_group_metadata
         .combine(ch_coverage_merged)
