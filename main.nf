@@ -145,7 +145,7 @@ workflow {
             }
 
         ch_samples_with_windows = ch_samples_for_join
-            .join(GENERATE_WINDOWS_GROUP.out.windows_bed)
+            .combine(GENERATE_WINDOWS_GROUP.out.windows_bed, by: 0)
 
         ch_variant_inputs = ch_samples_with_windows
             .map { group, strain, vcf, bam_path, group_refstrain, windows ->
