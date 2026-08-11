@@ -20,10 +20,10 @@ if (params.debug) {
 
 if (params.species == 'c_briggsae' && !params.samplesheet) {
     error """
-    A samplesheet is required for c_briggsae.
+    A sample sheet is required for c_briggsae.
 
     Example:
-      --samplesheet samples.csv
+      --samplesheet cb_groups.csv
     """.stripIndent()
 }
 

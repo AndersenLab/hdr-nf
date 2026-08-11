@@ -338,4 +338,4 @@ all_calls_SR_clustered_sfilt <- all_calls_SR_clustered %>%
   dplyr::select(-nclust,-ncalls,-sorter,-rleID,-ystrain) %>%
   dplyr::select(CHROM,start=minStart,end=maxEnd,STRAIN,size=divSize,meanVC,meanCF,bin_footprint=bin_foot)
 
-write.table(all_calls_SR_clustered_sfilt, "hdrs.tsv",row.names = F,quote = F,sep = '\t')
+write.table(all_calls_SR_clustered_sfilt, paste0(GROUP,"_hdrs.tsv"),row.names = F,quote = F,sep = '\t')
