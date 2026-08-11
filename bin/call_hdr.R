@@ -336,6 +336,7 @@ all_calls_SR_clustered <- rbind(joinClust,nojoin) %>%
 all_calls_SR_clustered_sfilt <- all_calls_SR_clustered %>%
   dplyr::filter(divSize >= 5e3) %>%
   dplyr::select(-nclust,-ncalls,-sorter,-rleID,-ystrain) %>%
-  dplyr::select(CHROM,start=minStart,end=maxEnd,STRAIN,size=divSize,meanVC,meanCF,bin_footprint=bin_foot)
+  dplyr::mutate(group=GROUP) %>%
+  dplyr::select(CHROM,start=minStart,end=maxEnd,group,STRAIN,size=divSize,meanVC,meanCF,bin_footprint=bin_foot)
 
 write.table(all_calls_SR_clustered_sfilt, "hdrs.tsv",row.names = F,quote = F,sep = '\t')
