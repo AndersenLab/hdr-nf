@@ -157,6 +157,34 @@ workflow {
                 tuple(group, strain, bam_path, windows)
             }
 
+        ch_tropical_ref = ch_group_refs
+            .filter { group, ref, group_refstrain ->
+                group == 'Tropical'
+            }
+            .map { group, ref, group_refstrain ->
+                ref
+            }
+            .first()
+
+        ch_nucmer_inputs = ch_group_refs
+            .filter { group, ref, group_refstrain ->
+                group != 'Tropical'
+            }
+            .map { group, ref, group_refstrain ->
+                tuple(group, ref)
+            }
+            .combine(ch_tropical_ref)
+
+        ALIGN_TO_TROPICAL(ch_nucmer_inputs)
+
+        ch_all_group_alignments = ALIGN_TO_TROPICAL.out.coords
+            .map { group, coords ->
+                coords
+            }
+            .collect()
+
+        MERGE_GROUP_ALIGNMENTS(ch_all_group_alignments)
+
     } else {
 
         ch_vcf     = channel.fromPath(invcf, checkIfExists: true)
@@ -401,5 +429,60 @@ process CALL_HDRS {
         ${vcthresh}
 
     mv hdrs.tsv ${group}.hdrs.tsv
+    """
+}
+
+process ALIGN_TO_TROPICAL {
+    tag "${group}_vs_Tropical"
+    label 'process_med'
+    container '<<<NUCMER_CONTAINER>>>'
+    beforeScript = 'module load singularity'
+
+    input:
+    tuple val(group),
+          path(query_genome),
+          path(tropical_genome)
+
+    output:
+    tuple val(group),
+          path("${group}_transformed.tsv"),
+          emit: coords
+
+    script:
+    """
+    nucmer \
+        --maxgap=500 \
+        --mincluster=100 \
+        --prefix=${group} \
+        --coords \
+        ${tropical_genome} \
+        ${query_genome}
+
+    show-coords \
+        -r \
+        -l \
+        -T \
+        ${group}.delta | \
+        awk -v g="${group}" \
+            'BEGIN{OFS="\\t"} \$5 > 1000 {print g, \$0}' \
+        > ${group}_transformed.tsv
+    """
+}
+
+process MERGE_GROUP_ALIGNMENTS {
+    tag "merge_group_alignments"
+    label 'process_low'
+    publishDir "${params.output}/alignments", mode: 'copy'
+
+    input:
+    path alignment_files
+
+    output:
+    path "all_groups.vs_Tropical.coords.tsv",
+        emit: merged_coords
+
+    script:
+    """
+    cat ${alignment_files} > all_groups.vs_Tropical.coords.tsv
     """
 }
