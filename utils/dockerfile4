@@ -1,0 +1,16 @@
+FROM mambaorg/micromamba:latest
+
+USER root
+WORKDIR /data
+
+USER $MAMBA_USER
+
+RUN micromamba install -y -n base \
+    -c conda-forge \
+    -c bioconda \
+    mummer=3.23 \
+    && micromamba clean --all --yes
+
+ENV PATH="/opt/conda/bin:${PATH}"
+
+CMD ["nucmer", "--help"]
