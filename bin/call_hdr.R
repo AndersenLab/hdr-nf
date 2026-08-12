@@ -56,7 +56,7 @@ classifyPartition <- function(df,cf,idy) {
 }
 
 ## this function estimates the frequency at which each bin is classified as hyperdivergent in the sampled population
-## low frequency () bins are discarded to avoid super-clustering of divergent regions
+## low frequency bins can be re discarded to avoid super-clustering of divergent regions
 frequencyEstimates <- function(df) {
   denom<-length(unique(df$STRAIN))
   df2 <- df %>% 
@@ -333,10 +333,12 @@ all_calls_SR_clustered <- rbind(joinClust,nojoin) %>%
   dplyr::mutate(ystrain=cur_group_id()) %>%
   dplyr::ungroup() 
 
+#filter by size, rename columns for print
 all_calls_SR_clustered_sfilt <- all_calls_SR_clustered %>%
   dplyr::filter(divSize >= 5e3) %>%
   dplyr::select(-nclust,-ncalls,-sorter,-rleID,-ystrain) %>%
   dplyr::mutate(group=GROUP) %>%
   dplyr::select(CHROM,start=minStart,end=maxEnd,group,STRAIN,size=divSize,meanVC,meanCF,bin_footprint=bin_foot)
 
+#write
 write.table(all_calls_SR_clustered_sfilt, "hdrs.tsv",row.names = F,quote = F,sep = '\t')
