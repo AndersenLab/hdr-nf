@@ -1,3 +1,5 @@
+#!/usr/bin/env Rscript
+
 library(plyr)
 library(dplyr)
 library(tidyr)
@@ -8,31 +10,111 @@ library(data.table)
 
 args <- commandArgs(trailingOnly = TRUE)
 
-all_calls_SR_clustered_NR <- readr::read_tsv("<<<CONCAT_HDRS>>>")
+hdr_file     <- args[1]
+coords_file  <- args[2]
+group_id     <- args[3]
+output_file  <- args[4]
 
-nuc <- readr::read_tsv("<<<NUCMER_ALIGNMENTS>>>", col_names = c("S1","E1","S2","E2","L1","L2","IDY","LENR","LENQ","REF","HIFI","STRAIN")) %>%
-  dplyr::filter(!grepl("ptg",HIFI)) %>% 
-  dplyr::filter(REF==HIFI) %>%
+all_calls_SR_clustered_NR <- readr::read_tsv(
+  hdr_file,
+  show_col_types = FALSE
+)
+
+strain <- dplyr::case_match(
+  group_id,
+  "AD"        ~ "ECA2670",
+  "KD"        ~ "JU1348",
+  "Temperate" ~ "JU2536",
+  "TH"        ~ "NIC1660",
+  "TD2"       ~ "BRC20492",
+  "TD1"       ~ "BRC20530",
+  .default    = NA_character_
+)
+
+if (is.na(strain)) {
+  stop("Unknown group_id: ", group_id)
+}
+
+if (!all(all_calls_SR_clustered_NR$group == group_id)) {
+  stop(
+    "HDR file contains group(s) inconsistent with group_id = ",
+    group_id
+  )
+}
+
+nuc <- readr::read_tsv(
+  coords_file,
+  col_names = c(
+    "GROUP", "S1", "E1", "S2", "E2", "L1", "L2",
+    "IDY", "LENR", "LENQ", "REF", "HIFI"
+  ),
+  show_col_types = FALSE
+) %>%
+  dplyr::filter(GROUP == group_id) %>%
+  dplyr::filter(!grepl("ptg", HIFI)) %>%
+  dplyr::filter(REF == HIFI) %>%
   dplyr::filter(L2 > 3e3) %>%
-  dplyr::group_by(STRAIN,HIFI) %>%
-  dplyr::arrange(STRAIN,HIFI,S2) %>%
-  dplyr::mutate(leadS1=lead(S1),leadE1=lead(E1),leadS2=lead(S2),leadE2=lead(E2),lagS1=lag(S1),lagE1=lag(E1),lagS2=lag(S2),lagE2=lag(E2)) %>%
+  dplyr::mutate(STRAIN = strain) %>%
+  dplyr::select(-GROUP) %>%
+  dplyr::group_by(STRAIN, HIFI) %>%
+  dplyr::arrange(STRAIN, HIFI, S2) %>%
+  dplyr::mutate(
+    leadS1 = lead(S1),
+    leadE1 = lead(E1),
+    leadS2 = lead(S2),
+    leadE2 = lead(E2),
+    lagS1  = lag(S1),
+    lagE1  = lag(E1),
+    lagS2  = lag(S2),
+    lagE2  = lag(E2)
+  ) %>%
   dplyr::ungroup()
 
-calls <- as.data.table(all_calls_SR_clustered_NR)[, rowid := .I]
-calls <- calls[, .(rowid, region_source = STRAIN, genome = REF, contig = CHROM,
-                   start = minStart, end = maxEnd)]
+if (nrow(nuc) == 0) {
+  stop(
+    "No NUCmer alignments remain for group ", group_id,
+    " after filtering"
+  )
+}
+
+if (nrow(all_calls_SR_clustered_NR) == 0) {
+  stop("HDR file contains no calls for group ", group_id)
+}
+
+calls <- as.data.table(all_calls_SR_clustered_NR)[
+  , .(
+    rowid = .I,
+    region_source = STRAIN,
+    genome = strain,
+    contig = CHROM,
+    start = as.integer(start),
+    end = as.integer(end)
+  )
+]
 
 nuc_dt <- as.data.table(nuc)[, idx := .I]
-nuc_dt <- nuc_dt[, .(idx, genome = STRAIN, contig = HIFI,
-                     start = pmin(S2, E2), end = pmax(S2, E2),
-                     orig_start=S2,orig_end=E2, L1=L1, L2=L2,
-                     leadS1=leadS1,leadE1=leadE1,leadS2=leadS2,leadE2=leadE2,
-                     lagS1=lagS1,lagE1=lagE1,lagS2=lagS2,lagE2=lagE2,
-                     refchrom=REF,refstart=S1,refend=E1)]
+nuc_dt <- nuc_dt[, .(idx,
+                     genome = STRAIN,
+                     contig = HIFI,
+                     start = pmin(S2, E2),
+                     end = pmax(S2, E2),
+                     orig_start=S2,
+                     orig_end=E2,
+                     L1=L1,
+                     L2=L2,
+                     leadS1=leadS1,
+                     leadE1=leadE1,
+                     leadS2=leadS2,
+                     leadE2=leadE2,
+                     lagS1=lagS1,
+                     lagE1=lagE1,
+                     lagS2=lagS2,
+                     lagE2=lagE2,
+                     refchrom=REF,
+                     refstart=S1,
+                     refend=E1
+)]
 
-
-calls[, `:=`(start = as.integer(start), end = as.integer(end))]
 nuc_dt[, `:=`(start = as.integer(start), end = as.integer(end))]
 
 # Set proper keys
@@ -50,8 +132,44 @@ matched <- foverlaps(
 matched_df <- as.data.frame(matched) %>%
   dplyr::mutate(hdr_chrom=contig) %>%
   dplyr::mutate(INV=ifelse(orig_start==start,F,T)) %>%
-  dplyr::select(refstart,refend,orig_start,orig_end,L1,L2,refchrom,contig,genome,INV,start,end,rowid,region_source,hdr_chrom,i.start,i.end,leadS1,leadE1,leadS2,leadE2,lagS1,lagE1,lagS2,lagE2) %>%
-  dplyr::rename(S1=refstart,E1=refend,S2=orig_start,E2=orig_end,REF=refchrom,HIFI=contig,HIFI_strain=genome,St2=start,Et2=end,group_id=rowid,hdr_strain=region_source,hdr_start=i.start,hdr_end=i.end) %>% 
+  dplyr::select(refstart,
+                refend,
+                orig_start,
+                orig_end,
+                L1,
+                L2,
+                refchrom,
+                contig,
+                genome,
+                INV,
+                start,
+                end,
+                rowid,
+                region_source,
+                hdr_chrom,
+                i.start,
+                i.end,
+                leadS1,
+                leadE1,
+                leadS2,
+                leadE2,
+                lagS1,
+                lagE1,
+                lagS2,
+                lagE2) %>%
+  dplyr::rename(S1=refstart,
+                E1=refend,
+                S2=orig_start,
+                E2=orig_end,
+                REF=refchrom,
+                HIFI=contig,
+                HIFI_strain=genome,
+                St2=start,
+                Et2=end,
+                group_id=rowid,
+                hdr_strain=region_source,
+                hdr_start=i.start,
+                hdr_end=i.end) %>% 
   dplyr::arrange(group_id,S2) %>%
   dplyr::mutate(HDRid = paste0(hdr_strain,hdr_chrom,hdr_start,hdr_end))
 
@@ -143,7 +261,7 @@ tigExtended_50kb <- tigExtensions %>%
   dplyr::mutate(S2=ifelse(iS2_extend==T & min(leadS2,leadE2) > hdr_end & !is.na(extend_length_WI_lead) & !is.na(extend_length_REF_lead) & extend_length_WI_lead < 5e4 & extend_length_REF_lead < 5e4, min(leadS2,leadE2),S2)) %>% 
   dplyr::ungroup()
 
-  counts50kb <- tigExtended_50kb %>%
+counts50kb <- tigExtended_50kb %>%
   dplyr::filter(
     any_extend == TRUE,
     (!is.na(extend_length_WI_lag) & !is.na(extend_length_REF_lag)) | (!is.na(extend_length_WI_lead) & !is.na(extend_length_REF_lead)),
@@ -159,28 +277,20 @@ hdr_counts <- tigTrim %>%
   dplyr::group_by(hdr_strain) %>%
   dplyr::summarise(num_unique_HDRid = n_distinct(HDRid), .groups = "drop")
 
-hdr_transformed_orig <- tigTrim %>%
-  dplyr::group_by(group_id) %>%
-  dplyr::summarise(
-    S1 = min(S1, E1),
-    E1 = max(S1, E1),
-    across(
-      .cols = -c(S1, E1, S2, E2, St2, Et2),
-      .fns = dplyr::first
-    ),
-    .groups = "drop"
-  )
- 
 hdr_transformed_50ext <- tigExtended_50kb %>%
   dplyr::group_by(group_id) %>%
   dplyr::summarise(
-    S1 = min(S1, E1),
-    E1 = max(S1, E1),
+    newS1 = min(c(S1, E1), na.rm = TRUE),
+    newE1 = max(c(S1, E1), na.rm = TRUE),
     across(
       .cols = -c(S1, E1, S2, E2, St2, Et2),
       .fns = dplyr::first
     ),
     .groups = "drop"
+  ) %>%
+  dplyr::rename(
+    S1 = newS1,
+    E1 = newE1
   )
 
 gap_clust_NR_TR <- hdr_transformed_50ext %>%
@@ -240,25 +350,12 @@ all_calls_SR_clustered_NR_TR <- rbind(joinClust_NR_TR,nojoin_NR_TR) %>%
   dplyr::ungroup() %>%
   dplyr::filter(!grepl("ptg",CHROM))
 
-
-hdr_rest <- all_calls_SR_clustered_NR_TR %>%
-  dplyr::select(CHROM,minStart,maxEnd,STRAIN,REF) %>%
+hdr_trans <- all_calls_SR_clustered_NR_TR %>%
+  dplyr::mutate(group=group_id) %>%
+  dplyr::select(CHROM,start=minStart,end=maxEnd,group,STRAIN,REF) %>%
   dplyr::rename(source=REF) %>%
-  dplyr::mutate(mode="TRANSFORMED")
+  dplyr::mutate(start=round(start),end=round(end),size=end-start) %>%
+  dplyr::relocate(source, .after = dplyr::last_col())
 
-hdr_qx <- all_calls_SR_clustered %>%
-  dplyr::select(CHROM,minStart,maxEnd,STRAIN) %>%
-  dplyr::mutate(source="QX1410")
+write.table(hdr_trans, output_file, row.names = F,quote = F,sep = '\t')
 
-hdr_tot <- rbind(hdr_qx,hdr_rest %>% dplyr::select(-mode) %>% dplyr::mutate(minStart=round(minStart),maxEnd=round(maxEnd))) %>%
-  dplyr::mutate(divSize=maxEnd-minStart) %>%
-  dplyr::filter(divSize >= 5e3) %>%
-  dplyr::group_by(STRAIN) %>%
-  dplyr::mutate(ncalls=n()) %>%
-  dplyr::ungroup() %>%
-  dplyr::arrange(desc(ncalls),STRAIN,CHROM,minStart) %>%
-  dplyr::mutate(sorter=paste0(ncalls,STRAIN)) %>%
-  dplyr::mutate(rleID=data.table::rleid(sorter)) %>%
-  dplyr::group_by(STRAIN) %>%
-  dplyr::mutate(ystrain=cur_group_id()) %>%
-  dplyr::ungroup()

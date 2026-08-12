@@ -246,6 +246,35 @@ workflow {
         vcthresh
     )
 
+    if (params.species == 'c_briggsae') {
+        ch_hdrs_to_transform = CALL_HDRS.out.hdrs
+            .filter { group, hdrs ->
+                group != 'Tropical'
+            }
+
+        TRANSFORM_HDRS(
+            ch_hdrs_to_transform,
+            MERGE_GROUP_ALIGNMENTS.out.merged_coords
+        )
+
+        ch_transformed_hdrs = TRANSFORM_HDRS.out.transformed_hdrs
+            .map { group, hdr -> hdr }
+            .collect()
+
+        ch_tropical_hdr = CALL_HDRS.out.hdrs
+            .filter { group, hdr ->
+                group == 'Tropical'
+            }
+            .map { group, hdr ->
+                hdr
+            }
+            .first()
+
+        MERGE_TRANSFORMED_HDRS(
+            ch_transformed_hdrs,
+            ch_tropical_hdr
+        )
+    }
 }
 
 process GENERATE_SAMPLE_LIST_AND_WINDOWS {
@@ -397,7 +426,12 @@ process MERGE_THRESHOLDS {
 process CALL_HDRS {
     tag "call_hdrs_${group}"
     label 'process_med'
-    publishDir "${params.output}/hdrs", mode: 'copy'
+    publishDir(
+        params.species == 'c_briggsae'
+            ? "${params.output}/hdr_untransformed"
+            : "${params.output}/hdrs",
+        mode: 'copy'
+    )
     container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
     beforeScript = 'module load singularity'
 
@@ -436,6 +470,7 @@ process ALIGN_TO_TROPICAL {
     tag "${group}_vs_Tropical"
     label 'process_med'
     container 'docker://docker.io/nicmoya/nucmer_hdr_image:2026_08_12'
+    //publishDir "${params.output}/alignments_raw", mode: 'copy'
     beforeScript = 'module load singularity'
 
     input:
@@ -472,7 +507,7 @@ process ALIGN_TO_TROPICAL {
 process MERGE_GROUP_ALIGNMENTS {
     tag "merge_group_alignments"
     label 'process_low'
-    publishDir "${params.output}/alignments", mode: 'copy'
+    publishDir "${params.output}/genome_alignments", mode: 'copy'
 
     input:
     path alignment_files
@@ -483,6 +518,75 @@ process MERGE_GROUP_ALIGNMENTS {
 
     script:
     """
-    cat ${alignment_files} > all_groups.vs_Tropical.coords.tsv
+    cat ${alignment_files} | grep -v "\\[S1\\]" > all_groups.vs_Tropical.coords.tsv
+    """
+}
+
+process TRANSFORM_HDRS {
+    tag "transform_coords_${group}"
+    label 'process_med'
+    //publishDir "${params.output}/transformed_coords", mode: 'copy'
+    container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
+    beforeScript = 'module load singularity'
+
+    input:
+    tuple val(group), path(hdr_file)
+    path merged_coords
+
+    output:
+    tuple val(group), path("${group}.transformed_hdrs.tsv"),
+        emit: transformed_hdrs
+
+    script:
+    """
+    transform_hdr.R \
+        ${hdr_file} \
+        ${merged_coords} \
+        ${group} \
+        ${group}.transformed_hdrs.tsv
+    """
+}
+
+process MERGE_TRANSFORMED_HDRS {
+    tag "merge_transformed_hdrs"
+    label 'process_low'
+    publishDir "${params.output}/hdrs_transformed", mode: 'copy'
+
+    input:
+    path transformed_hdrs
+    path tropical_hdr
+
+    output:
+    path "all_groups.transformed_hdrs.tsv",
+        emit: merged_hdrs
+
+    script:
+    """
+    awk 'BEGIN{FS=OFS="\\t"}
+        NR==1 {print "CHROM","start","end","group","STRAIN","size","source"; next}
+        {print \$1,\$2,\$3,\$4,\$5,\$6,"${refstrain}"}' \
+        ${tropical_hdr} > tropical.normalized.tsv
+
+    head -n 1 tropical.normalized.tsv > all_groups.unsorted.tsv
+
+    tail -n +2 tropical.normalized.tsv >> all_groups.unsorted.tsv
+
+    for f in ${transformed_hdrs}; do
+        tail -n +2 "\$f" >> all_groups.unsorted.tsv
+    done
+
+    head -n 1 all_groups.unsorted.tsv > all_groups.transformed_hdrs.tsv
+
+    tail -n +2 all_groups.unsorted.tsv | \
+    awk 'BEGIN{FS=OFS="\\t"}
+        \$1=="I"   {chr=1}
+        \$1=="II"  {chr=2}
+        \$1=="III" {chr=3}
+        \$1=="IV"  {chr=4}
+        \$1=="V"   {chr=5}
+        \$1=="X"   {chr=6}
+        {print \$4,\$5,chr,\$2,\$0}' | \
+    sort -t \$'\\t' -k1,1 -k2,2 -k3,3n -k4,4n | \
+    cut -f5- >> all_groups.transformed_hdrs.tsv
     """
 }
