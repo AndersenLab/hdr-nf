@@ -435,7 +435,7 @@ process CALL_HDRS {
 process ALIGN_TO_TROPICAL {
     tag "${group}_vs_Tropical"
     label 'process_med'
-    container '<<<NUCMER_CONTAINER>>>'
+    container 'docker://docker.io/nicmoya/nucmer_hdr_image:2026_08_12'
     beforeScript = 'module load singularity'
 
     input:
