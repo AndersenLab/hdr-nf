@@ -146,17 +146,11 @@ workflow {
             def default_inputs = []
 
             if (!params.gtcheck) {
-                default_inputs << """
-                GTCHECK:
-                 ${ingtcheck}
-               """.stripIndent().trim()
+                default_inputs << "  GTCHECK:\n    ${ingtcheck}"
             }
 
             if (!params.groups) {
-                default_inputs << """
-               Isotype groups:
-                 ${ingroups}
-                """.stripIndent().trim()
+                default_inputs << "  Isotype groups:\n    ${ingroups}"
             }
 
             log.warn """
@@ -688,7 +682,7 @@ process GENERATE_TEMPLATE {
 
     script:
     """
-    Rscript ${projectDir}/bin/generate_template.R \
+    generate_template.R \
         ${gtcheck} \
         ${isogroups}
     """

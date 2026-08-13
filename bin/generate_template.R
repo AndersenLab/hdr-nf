@@ -1,5 +1,9 @@
 #!/usr/bin/env Rscript
 
+library(dplyr)
+library(readr)
+library(tibble)
+
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) < 2) {
