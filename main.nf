@@ -12,19 +12,30 @@ if (params.debug) {
     println """
     hdr-nf does not have a debug mode yet.....
     """
+} else if (params.species == 'c_briggsae') {
+
+    if (params.samplesheet) {
+        println """
+        Running hdr-nf in relatedness group mode.
+        Using the provided sample sheet:
+          ${params.samplesheet}
+
+        Coordinate transformation will be performed to the Tropical reference.
+        """
+    } else {
+        println """
+        Running hdr-nf in relatedness group (RG) mode.
+        No RG sample sheet was provided.
+        A RG sample sheet template will be along with relatedness group lists necessary
+        to run alignment-nf and wi-gatk (required to fill the sample sheet).
+        Coordinate transformation will be performed to the Tropical reference.
+        """
+    }
 } else {
     println """
-    Running hdr-nf in standard mode.
+    Running hdr-nf in standard mode (without relatedness groups).
+    Using the standard VCF, reference genome, and BAM inputs.
     """
-}
-
-if (params.species == 'c_briggsae' && !params.samplesheet) {
-    error """
-    A sample sheet is required for c_briggsae.
-
-    Example:
-      --samplesheet cb_groups.csv
-    """.stripIndent()
 }
 
 def bam_dir = [
@@ -63,35 +74,44 @@ def var_thresh = [
     c_briggsae  : '11'
 ]
 
+def ref_gtcheck = [
+    c_elegans   : '/path/to/c_elegans/gtcheck.tsv',
+    c_tropicalis: '/path/to/c_tropicalis/gtcheck.tsv',
+    c_briggsae  : '/path/to/c_briggsae/gtcheck.tsv'
+]
+
 def invcf = params.vcf ?: ref_vcf[params.species]
 def ingenome = params.refgen ?: ref_genome[params.species]
 def inbam = params.bam ?: bam_dir[params.species]
 def refstrain = params.str ?: ref_str[params.species]
 def covthresh = params.pbt ?: cov_thresh[params.species]
 def vcthresh = params.vct ?: var_thresh[params.species]
+def ingtcheck = params.gtcheck ?: ref_gtcheck[params.species]
 
 def paramSummary = [
-    'Species'       : params.species,
-    'VCF'           : invcf,
-    'Reference genome'     : ingenome,
-    'BAM directory' : inbam,
-    'REF strain'    : refstrain,
+    'Species'            : params.species,
+    'VCF'                : invcf,
+    'Reference genome'   : ingenome,
+    'BAM directory'      : inbam,
+    'REF strain'         : refstrain,
     'Coverage threshold' : covthresh,
-    'Variant threshold' : vcthresh,
-    'Output directory'    : params.output
+    'Variant threshold'  : vcthresh,
+    'Output directory'   : params.output
 ]
+
+if (params.species == 'c_briggsae') {
+    paramSummary['Sample Sheet'] = params.samplesheet
+}
 
 if (covthresh == null || vcthresh == null) {
     error "Thresholds not defined for species: ${params.species}"
 }
 
 def log_summary() {
-    // Corrected log summary function to print information instead of recursive call
-    log.info("Workflow summary: \n" + 
-             "Debug mode: ${params.debug}\n" + 
-             "Output directory: ${params.output}\n")
-    
-    // Show help if requested
+    log.info("Workflow summary: \n" +
+        "Debug mode: ${params.debug}\n" +
+        "Output directory: ${params.output}\n")
+
     if (params.help) {
         log.info("Help requested, exiting.")
         exit 1
@@ -99,181 +119,206 @@ def log_summary() {
 }
 
 def maxLen = paramSummary.keySet().collect { k -> k.size() }.max()
-    def summary = paramSummary.collect { k, v ->
-        "${k.padRight(maxLen)} : ${v}"
-    }.join('\n    ')
 
-    log.info """
-    =========================================
-      Pipeline Parameters
-    =========================================
-    ${summary}
-    =========================================
-    """.stripIndent()
+def summary = paramSummary.collect { k, v ->
+    "${k.padRight(maxLen)} : ${v}"
+}.join('\n')
+
+log.info """
+=========================================
+  Pipeline Parameters
+=========================================
+${summary}
+=========================================
+""".stripIndent()
 
 workflow {
-    
-    if (params.species == 'c_briggsae') {
 
-        ch_samples = channel
-            .fromPath(params.samplesheet, checkIfExists: true)
-            .splitCsv(header: true)
-            .map { row ->
-                tuple(
-                    row.group,
-                    row.strain,
-                    file(row.vcf),
-                    file(row.ref),
-                    file(row.bam_path),
-                    row.refstrain
-                )
-            }
+    if (params.species == 'c_briggsae' && !params.samplesheet) {
+        if (!params.gtcheck) {
+        log.warn """
+        No isotype GTCHECK file was provided with --gtcheck.
+        The default GTCHECK file for ${params.species} will be used:
 
-        ch_group_refs = ch_samples
-            .map { group, strain, vcf, ref, bam, group_refstrain ->
-                tuple(group, ref, group_refstrain)
-            }
-            .unique()
+          ${ingtcheck}
 
-        GENERATE_WINDOWS_GROUP(ch_group_refs)
+        Please ensure this file is appropriate for your dataset. 
+        Mismatches between VCF and GTCHECK samples will generate an 
+        incomplete/truncated sample sheet template.
+        """.stripIndent()
+        }
+        
+        ch_gtcheck = channel.fromPath(
+            ingtcheck,
+            checkIfExists: true
+        )
 
-        ch_group_metadata = GENERATE_WINDOWS_GROUP.out.windows_bed
-
-        ch_samples_for_join = ch_samples
-            .map { group, strain, vcf, ref, bam_path, group_refstrain ->
-                tuple(group, strain, vcf, bam_path)
-            }
-
-        ch_samples_with_windows = ch_samples_for_join
-            .combine(GENERATE_WINDOWS_GROUP.out.windows_bed, by: 0)
-
-        ch_variant_inputs = ch_samples_with_windows
-            .map { group, strain, vcf, bam_path, group_refstrain, windows ->
-                tuple(group, strain, vcf, windows)
-            }
-
-        ch_coverage_inputs = ch_samples_with_windows
-            .map { group, strain, vcf, bam_path, group_refstrain, windows ->
-                tuple(group, strain, bam_path, windows)
-            }
-
-        ch_tropical_ref = ch_group_refs
-            .filter { group, ref, group_refstrain ->
-                group == 'Tropical'
-            }
-            .map { group, ref, group_refstrain ->
-                ref
-            }
-            .first()
-
-        ch_nucmer_inputs = ch_group_refs
-            .filter { group, ref, group_refstrain ->
-                group != 'Tropical'
-            }
-            .map { group, ref, group_refstrain ->
-                tuple(group, ref)
-            }
-            .combine(ch_tropical_ref)
-
-        ALIGN_TO_TROPICAL(ch_nucmer_inputs)
-
-        ch_all_group_alignments = ALIGN_TO_TROPICAL.out.coords
-            .map { group, coords ->
-                coords
-            }
-            .collect()
-
-        MERGE_GROUP_ALIGNMENTS(ch_all_group_alignments)
+        GENERATE_TEMPLATE(ch_gtcheck)
 
     } else {
 
-        ch_vcf     = channel.fromPath(invcf, checkIfExists: true)
-        ch_genome  = channel.fromPath(ingenome, checkIfExists: true)
-        ch_bam_dir = channel.fromPath(inbam, checkIfExists: true)
+        if (params.species == 'c_briggsae') {
 
-        GENERATE_SAMPLE_LIST_AND_WINDOWS(
-            ch_vcf,
-            ch_genome
-        )
+            ch_samples = channel
+                .fromPath(params.samplesheet, checkIfExists: true)
+                .splitCsv(header: true)
+                .map { row ->
+                    tuple(
+                        row.group,
+                        row.strain,
+                        file(row.vcf),
+                        file(row.ref),
+                        file(row.bam_path),
+                        row.refstrain
+                    )
+                }
 
-        ch_shared_windows = GENERATE_SAMPLE_LIST_AND_WINDOWS.out.windows_bed
+            ch_group_refs = ch_samples
+                .map { group, strain, vcf, ref, bam, group_refstrain ->
+                    tuple(group, ref, group_refstrain)
+                }
+                .unique()
 
-        ch_group_metadata = ch_shared_windows.map { windows ->
-            tuple("GLOBAL", refstrain, windows)
-        }
+            GENERATE_WINDOWS_GROUP(ch_group_refs)
 
-        ch_strains = GENERATE_SAMPLE_LIST_AND_WINDOWS.out.sample_list
-            .splitText()
-            .map { line ->
-                tuple("GLOBAL", line.trim())
-        }
+            ch_group_metadata = GENERATE_WINDOWS_GROUP.out.windows_bed
 
-        ch_variant_inputs = ch_strains
-            .combine(ch_vcf)
-            .combine(ch_shared_windows)
+            ch_samples_for_join = ch_samples
+                .map { group, strain, vcf, ref, bam_path, group_refstrain ->
+                    tuple(group, strain, vcf, bam_path)
+                }
 
-        ch_coverage_inputs = ch_strains
-            .combine(ch_bam_dir)
-            .combine(ch_shared_windows)
- 
-    }
+            ch_samples_with_windows = ch_samples_for_join
+                .combine(GENERATE_WINDOWS_GROUP.out.windows_bed, by: 0)
 
-    COUNT_VARIANTS_PER_WINDOW(ch_variant_inputs)
-    MOSDEPTH_COVERAGE(ch_coverage_inputs)
+            ch_variant_inputs = ch_samples_with_windows
+                .map { group, strain, vcf, bam_path, group_refstrain, windows ->
+                    tuple(group, strain, vcf, windows)
+                }
 
-    ch_all_counts = COUNT_VARIANTS_PER_WINDOW.out.variant_counts
-        .map { group, strain, tsv -> tsv }
-        .collect()
+            ch_coverage_inputs = ch_samples_with_windows
+                .map { group, strain, vcf, bam_path, group_refstrain, windows ->
+                    tuple(group, strain, bam_path, windows)
+                }
 
-    MERGE_VARIANT_COUNTS(ch_all_counts)
+            ch_tropical_ref = ch_group_refs
+                .filter { group, ref, group_refstrain ->
+                    group == 'Tropical'
+                }
+                .map { group, ref, group_refstrain ->
+                    ref
+                }
+                .first()
 
-    ch_all_thresholds = MOSDEPTH_COVERAGE.out.thresholds_bed
-        .map { group, strain, bed -> bed }
-        .collect()
+            ch_nucmer_inputs = ch_group_refs
+                .filter { group, ref, group_refstrain ->
+                    group != 'Tropical'
+                }
+                .map { group, ref, group_refstrain ->
+                    tuple(group, ref)
+                }
+                .combine(ch_tropical_ref)
 
-    MERGE_THRESHOLDS(ch_all_thresholds)
+            ALIGN_TO_TROPICAL(ch_nucmer_inputs)
 
-    ch_coverage_merged = MERGE_THRESHOLDS.out.merged_thresholds
-    ch_varct_merged = MERGE_VARIANT_COUNTS.out.merged_counts
+            ch_all_group_alignments = ALIGN_TO_TROPICAL.out.coords
+                .map { group, coords ->
+                    coords
+                }
+                .collect()
 
-    ch_hdr_inputs = ch_group_metadata
-        .combine(ch_coverage_merged)
-        .combine(ch_varct_merged)
+            MERGE_GROUP_ALIGNMENTS(ch_all_group_alignments)
 
-    CALL_HDRS(
-        ch_hdr_inputs,
-        covthresh,
-        vcthresh
-    )
+        } else {
 
-    if (params.species == 'c_briggsae') {
-        ch_hdrs_to_transform = CALL_HDRS.out.hdrs
-            .filter { group, hdrs ->
-                group != 'Tropical'
+            ch_vcf     = channel.fromPath(invcf, checkIfExists: true)
+            ch_genome  = channel.fromPath(ingenome, checkIfExists: true)
+            ch_bam_dir = channel.fromPath(inbam, checkIfExists: true)
+
+            GENERATE_SAMPLE_LIST_AND_WINDOWS(
+                ch_vcf,
+                ch_genome
+            )
+
+            ch_shared_windows = GENERATE_SAMPLE_LIST_AND_WINDOWS.out.windows_bed
+
+            ch_group_metadata = ch_shared_windows.map { windows ->
+                tuple("GLOBAL", refstrain, windows)
             }
 
-        TRANSFORM_HDRS(
-            ch_hdrs_to_transform,
-            MERGE_GROUP_ALIGNMENTS.out.merged_coords
-        )
+            ch_strains = GENERATE_SAMPLE_LIST_AND_WINDOWS.out.sample_list
+                .splitText()
+                .map { line ->
+                    tuple("GLOBAL", line.trim())
+                }
 
-        ch_transformed_hdrs = TRANSFORM_HDRS.out.transformed_hdrs
-            .map { group, hdr -> hdr }
+            ch_variant_inputs = ch_strains
+                .combine(ch_vcf)
+                .combine(ch_shared_windows)
+
+            ch_coverage_inputs = ch_strains
+                .combine(ch_bam_dir)
+                .combine(ch_shared_windows)
+        }
+
+        COUNT_VARIANTS_PER_WINDOW(ch_variant_inputs)
+        MOSDEPTH_COVERAGE(ch_coverage_inputs)
+
+        ch_all_counts = COUNT_VARIANTS_PER_WINDOW.out.variant_counts
+            .map { group, strain, tsv -> tsv }
             .collect()
 
-        ch_tropical_hdr = CALL_HDRS.out.hdrs
-            .filter { group, hdr ->
-                group == 'Tropical'
-            }
-            .map { group, hdr ->
-                hdr
-            }
-            .first()
+        MERGE_VARIANT_COUNTS(ch_all_counts)
 
-        MERGE_TRANSFORMED_HDRS(
-            ch_transformed_hdrs,
-            ch_tropical_hdr
+        ch_all_thresholds = MOSDEPTH_COVERAGE.out.thresholds_bed
+            .map { group, strain, bed -> bed }
+            .collect()
+
+        MERGE_THRESHOLDS(ch_all_thresholds)
+
+        ch_coverage_merged = MERGE_THRESHOLDS.out.merged_thresholds
+        ch_varct_merged = MERGE_VARIANT_COUNTS.out.merged_counts
+
+        ch_hdr_inputs = ch_group_metadata
+            .combine(ch_coverage_merged)
+            .combine(ch_varct_merged)
+
+        CALL_HDRS(
+            ch_hdr_inputs,
+            covthresh,
+            vcthresh
         )
+
+        if (params.species == 'c_briggsae') {
+
+            ch_hdrs_to_transform = CALL_HDRS.out.hdrs
+                .filter { group, hdrs ->
+                    group != 'Tropical'
+                }
+
+            TRANSFORM_HDRS(
+                ch_hdrs_to_transform,
+                MERGE_GROUP_ALIGNMENTS.out.merged_coords
+            )
+
+            ch_transformed_hdrs = TRANSFORM_HDRS.out.transformed_hdrs
+                .map { group, hdr -> hdr }
+                .collect()
+
+            ch_tropical_hdr = CALL_HDRS.out.hdrs
+                .filter { group, hdr ->
+                    group == 'Tropical'
+                }
+                .map { group, hdr ->
+                    hdr
+                }
+                .first()
+
+            MERGE_TRANSFORMED_HDRS(
+                ch_transformed_hdrs,
+                ch_tropical_hdr
+            )
+        }
     }
 }
 
@@ -588,5 +633,29 @@ process MERGE_TRANSFORMED_HDRS {
         {print \$4,\$5,chr,\$2,\$0}' | \
     sort -t \$'\\t' -k1,1 -k2,2 -k3,3n -k4,4n | \
     cut -f5- >> all_groups.transformed_hdrs.tsv
+    """
+}
+
+process GENERATE_TEMPLATE {
+    tag "generate_template"
+    label 'process_low'
+    publishDir "${params.output}/template_ss", mode: 'copy'
+    container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
+    beforeScript = 'module load singularity'
+
+    input:
+    path gtcheck
+
+    output:
+    path "c_briggsae.samplesheet.template.csv",
+        emit: samplesheet_template
+
+    path "*_alignment_sample_sheet.txt",
+        emit: alignment_sample_sheets
+
+    script:
+    """
+    Rscript generate_template.R \
+        ${gtcheck}
     """
 }
