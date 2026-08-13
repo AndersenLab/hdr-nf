@@ -113,17 +113,6 @@ if (covthresh == null || vcthresh == null) {
     error "Thresholds not defined for species: ${params.species}"
 }
 
-def log_summary() {
-    log.info("Workflow summary: \n" +
-        "Debug mode: ${params.debug}\n" +
-        "Output directory: ${params.output}\n")
-
-    if (params.help) {
-        log.info("Help requested, exiting.")
-        exit 1
-    }
-}
-
 def maxLen = paramSummary.keySet().collect { k -> k.size() }.max()
 
 def summary = paramSummary.collect { k, v ->
