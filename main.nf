@@ -94,6 +94,7 @@ def covthresh = params.pbt ?: cov_thresh[params.species]
 def vcthresh = params.vct ?: var_thresh[params.species]
 def ingtcheck = params.gtcheck ?: ref_gtcheck[params.species]
 def ingroups = params.groups ?:ref_groups[params.species]
+
 def paramSummary = [
     'Species'            : params.species,
     'VCF'                : invcf,
@@ -106,7 +107,14 @@ def paramSummary = [
 ]
 
 if (params.species == 'c_briggsae') {
-    paramSummary['Sample Sheet'] = params.samplesheet
+
+    if (params.samplesheet) {
+        paramSummary['Sample Sheet'] = params.samplesheet
+    } else {
+        paramSummary['Sample Sheet']    = params.samplesheet
+        paramSummary['GTCHECK']         = params.gtcheck
+        paramSummary['Isotype groups']  = params.groups
+    }
 }
 
 if (covthresh == null || vcthresh == null) {
