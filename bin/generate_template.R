@@ -2,34 +2,56 @@
 
 args <- commandArgs(trailingOnly = TRUE)
 
-if (length(args) < 1) {
-  stop("Usage: generate_template.R <gtcheck.tsv>")
+if (length(args) < 2) {
+  stop("Usage: generate_template.R <gtcheck.tsv> <isogroups.tsv>")
 }
 
 gtcheck_file <- args[1]
+isogroups_file <- args[2]
 
 gt <- readr::read_tsv(
   gtcheck_file,
   show_col_types = FALSE
 )
 
-excluded_strains <- c(
-  "MY681",
-  "ECA1146",
-  "JU356",
-  "ECA1503"
+isogroups <- readr::read_tsv(
+  isogroups_file,
+  show_col_types = FALSE
+)
+
+required_isogroup_cols <- c(
+  "group",
+  "strain",
+  "isotype",
+  "isotype_ref_strain"
+)
+
+if (!all(required_isogroup_cols %in% colnames(isogroups))) {
+  stop(
+    "Isogroups file is missing required column(s): ",
+    paste(
+      setdiff(required_isogroup_cols, colnames(isogroups)),
+      collapse = ", "
+    )
+  )
+}
+
+strains_of_interest <- unique(
+  stats::na.omit(isogroups$isotype_ref_strain)
 )
 
 gt <- gt %>%
   dplyr::filter(
-    !i %in% excluded_strains,
-    !j %in% excluded_strains
+    i %in% strains_of_interest,
+    j %in% strains_of_interest
   )
 
-readr::write_tsv(
-  gt,
-  "gtcheck.filtered.tsv"
-)
+if (nrow(gt) == 0) {
+  stop(
+    "No GTCHECK comparisons remain after filtering i and j ",
+    "to strains in isotype_ref_strain"
+  )
+}
 
 ref_groups <- c(
   "BRC20492" = "TD2",
@@ -43,19 +65,44 @@ ref_groups <- c(
 
 refs <- names(ref_groups)
 
+missing_refs <- setdiff(
+  refs,
+  strains_of_interest
+)
+
+if (length(missing_refs) > 0) {
+  stop(
+    "Required relatedness-group reference strain(s) are absent from ",
+    "isotype_ref_strain: ",
+    paste(missing_refs, collapse = ", ")
+  )
+}
+
 matches <- gt %>%
   dplyr::filter(
     (i %in% refs & !j %in% refs) |
       (j %in% refs & !i %in% refs)
   ) %>%
   dplyr::mutate(
-    strain = dplyr::if_else(i %in% refs, j, i),
-    refstrain = dplyr::if_else(i %in% refs, i, j),
+    strain = dplyr::if_else(
+      i %in% refs,
+      j,
+      i
+    ),
+    refstrain = dplyr::if_else(
+      i %in% refs,
+      i,
+      j
+    ),
     concordance = (sites - discordance) / sites,
     group = unname(ref_groups[refstrain])
   ) %>%
-  dplyr::filter(concordance > 0.95) %>%
-  dplyr::group_by(strain) %>%
+  dplyr::filter(
+    concordance > 0.95
+  ) %>%
+  dplyr::group_by(
+    strain
+  ) %>%
   dplyr::slice_max(
     order_by = concordance,
     n = 1,
@@ -96,7 +143,9 @@ ref_paths <- c(
 template <- matches_bound %>%
   dplyr::mutate(
     vcf = "[REQUIRES_WI_GATK_NF]",
-    ref = unname(ref_paths[refstrain]),
+    ref = unname(
+      ref_paths[refstrain]
+    ),
     bam_path = "[REQUIRES_ALIGNMENT_NF]"
   ) %>%
   dplyr::select(
@@ -112,7 +161,11 @@ if (any(is.na(template$ref))) {
   stop(
     "Missing reference path for refstrain(s): ",
     paste(
-      unique(template$refstrain[is.na(template$ref)]),
+      unique(
+        template$refstrain[
+          is.na(template$ref)
+        ]
+      ),
       collapse = ", "
     )
   )
@@ -128,16 +181,20 @@ template %>%
     group,
     refstrain
   ) %>%
-  dplyr::group_walk(~ {
-    strains <- sort(unique(.x$strain))
-    
-    readr::write_lines(
-      strains,
-      paste0(
-        .y$group,
-        "_",
-        .y$refstrain,
-        "_alignment_sample_sheet.txt"
+  dplyr::group_walk(
+    ~ {
+      strains <- sort(
+        unique(.x$strain)
       )
-    )
-  })
+
+      readr::write_lines(
+        strains,
+        paste0(
+          .y$group,
+          "_",
+          .y$refstrain,
+          "_alignment_sample_sheet.txt"
+        )
+      )
+    }
+  )

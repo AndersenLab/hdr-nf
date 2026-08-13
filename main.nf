@@ -75,9 +75,15 @@ def var_thresh = [
 ]
 
 def ref_gtcheck = [
-    c_elegans   : '/path/to/c_elegans/gtcheck.tsv',
-    c_tropicalis: '/path/to/c_tropicalis/gtcheck.tsv',
-    c_briggsae  : '/path/to/c_briggsae/gtcheck.tsv'
+    c_elegans   : '/vast/eande106/data/c_elegans/WI/concordance/20250625/gtcheck.txt',
+    c_tropicalis: '/vast/eande106/data/c_tropicalis/WI/concordance/20250627/gtcheck.txt',
+    c_briggsae  : '/vast/eande106/data/c_briggsae/WI/concordance/20250626/gtcheck.txt'
+]
+
+def ref_groups = [
+    c_elegans   : '/vast/eande106/data/c_elegans/WI/concordance/20250625/isotype_groups.tsv',
+    c_tropicalis: '/vast/eande106/data/c_tropicalis/WI/concordance/20250627/isotype_groups.tsv',
+    c_briggsae  : '/vast/eande106/data/c_briggsae/WI/concordance/20250626/isotype_groups.tsv'
 ]
 
 def invcf = params.vcf ?: ref_vcf[params.species]
@@ -87,7 +93,7 @@ def refstrain = params.str ?: ref_str[params.species]
 def covthresh = params.pbt ?: cov_thresh[params.species]
 def vcthresh = params.vct ?: var_thresh[params.species]
 def ingtcheck = params.gtcheck ?: ref_gtcheck[params.species]
-
+def ingroups = params.groups ?:ref_groups[params.species]
 def paramSummary = [
     'Species'            : params.species,
     'VCF'                : invcf,
@@ -135,17 +141,35 @@ ${summary}
 workflow {
 
     if (params.species == 'c_briggsae' && !params.samplesheet) {
-        if (!params.gtcheck) {
-        log.warn """
-        No isotype GTCHECK file was provided with --gtcheck.
-        The default GTCHECK file for ${params.species} will be used:
+        if (!params.gtcheck || !params.groups) {
 
-          ${ingtcheck}
+            def default_inputs = []
 
-        Please ensure this file is appropriate for your dataset. 
-        Mismatches between VCF and GTCHECK samples will generate an 
-        incomplete/truncated sample sheet template.
-        """.stripIndent()
+            if (!params.gtcheck) {
+                default_inputs << """
+                GTCHECK:
+                 ${ingtcheck}
+               """.stripIndent().trim()
+            }
+
+            if (!params.groups) {
+                default_inputs << """
+               Isotype groups:
+                 ${ingroups}
+                """.stripIndent().trim()
+            }
+
+            log.warn """
+            Sample sheet is missing.
+            One or more isotype input files were not provided with --gtcheck/--groups.
+            The following default file(s) for ${params.species} will be used:
+
+            ${default_inputs.join('\n\n')}
+
+            Please ensure these files are appropriate for your dataset.
+            Mismatches between the isotype groups, GTCHECK, and VCF samples may
+            generate an incomplete/truncated sample sheet template.
+            """.stripIndent()
         }
         
         ch_gtcheck = channel.fromPath(
@@ -153,7 +177,15 @@ workflow {
             checkIfExists: true
         )
 
-        GENERATE_TEMPLATE(ch_gtcheck)
+        ch_isogroups = channel.fromPath(
+            ingroups,
+            checkIfExists: true
+        )
+
+        GENERATE_TEMPLATE(
+            ch_gtcheck,
+            ch_isogroups
+        )
 
     } else {
 
@@ -639,12 +671,13 @@ process MERGE_TRANSFORMED_HDRS {
 process GENERATE_TEMPLATE {
     tag "generate_template"
     label 'process_low'
-    publishDir "${params.output}/template_ss", mode: 'copy'
+    publishDir "${params.output}/template_sample_sheet", mode: 'copy'
     container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
     path gtcheck
+    path isogroups
 
     output:
     path "c_briggsae.samplesheet.template.csv",
@@ -655,7 +688,8 @@ process GENERATE_TEMPLATE {
 
     script:
     """
-    Rscript generate_template.R \
-        ${gtcheck}
+    Rscript ${projectDir}/bin/generate_template.R \
+        ${gtcheck} \
+        ${isogroups}
     """
 }
