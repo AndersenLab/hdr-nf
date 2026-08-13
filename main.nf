@@ -146,25 +146,33 @@ workflow {
             def default_inputs = []
 
             if (!params.gtcheck) {
-                default_inputs << "  GTCHECK:\n    ${ingtcheck}"
+                default_inputs << [
+                    "  GTCHECK:",
+                    "    ${ingtcheck}"
+                ].join('\n')
             }
 
             if (!params.groups) {
-                default_inputs << "  Isotype groups:\n    ${ingroups}"
+                default_inputs << [
+                    "  Isotype groups:",
+                    "    ${ingroups}"
+                ].join('\n')
             }
 
-            log.warn """
-            Sample sheet is missing.
-            One or more isotype input files were not provided with --gtcheck/--groups.
-            The following default file(s) for ${params.species} will be used:
+            def warning_msg = [
+                "Sample sheet is missing.",
+                "One or more isotype input files were not provided with --gtcheck/--groups.",
+                "The following default file(s) for ${params.species} will be used:",
+                "",
+                default_inputs.join('\n\n'),
+                "",
+                "Please ensure these files are appropriate for your dataset.",
+                "Mismatches between the isotype groups, GTCHECK, and VCF samples may",
+                "generate an incomplete/truncated sample sheet template."
+            ].join('\n')
 
-            ${default_inputs.join('\n\n')}
-
-            Please ensure these files are appropriate for your dataset.
-            Mismatches between the isotype groups, GTCHECK, and VCF samples may
-            generate an incomplete/truncated sample sheet template.
-            """.stripIndent()
-        }
+            log.warn warning_msg
+}
         
         ch_gtcheck = channel.fromPath(
             ingtcheck,
