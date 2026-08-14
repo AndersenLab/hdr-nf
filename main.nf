@@ -103,14 +103,15 @@ def ingtcheck = params.gtcheck ?: ref_gtcheck[params.species]
 def ingroups = params.groups ?:ref_groups[params.species]
 
 def paramSummary = [
-    'Species'            : params.species,
-    'VCF'                : invcf,
-    'Reference genome'   : ingenome,
-    'BAM directory'      : inbam,
-    'REF strain'         : refstrain,
-    'Coverage threshold' : covthresh,
-    'Variant threshold'  : vcthresh,
-    'Output directory'   : params.output
+    'Species'                     : params.species,
+    'VCF'                         : invcf,
+    'Reference genome'            : ingenome,
+    'BAM directory'               : inbam,
+    'REF strain'                  : refstrain,
+    'Coverage threshold'          : covthresh,
+    'Variant threshold'           : vcthresh,
+    'Reference overlap threshold' : rpothresh,
+    'Output directory'            : params.output
 ]
 
 if (params.species == 'c_briggsae') {
