@@ -138,7 +138,7 @@ REF           <- args[[4]]
 GROUP         <- args[[5]]
 COV_thresh    <- as.numeric(args[[6]])
 VC_thresh     <- as.numeric(args[[7]])
-
+RPO_thresh    <- as.numeric(args[[8]])
 
 bins_1kb_CB_stripped <- readr::read_tsv(
   windows_file,
@@ -254,8 +254,18 @@ overlaps <- data.table::foverlaps(
   type = "any"
 ) # find any overlap
 
+overlaps_pct <- data.table::copy(overlaps)
+
+overlaps_pct[, overlap_pct :=
+               100 * (pmin(end, i.end) - pmax(start, i.start)) /
+               (i.end - i.start)
+]
+
 to_drop <- unique(
-  overlaps[, .(CHROM, start = i.start, end = i.end, STRAIN)]
+  overlaps_pct[
+    overlap_pct > RPO_thresh,
+    .(CHROM, start = i.start, end = i.end, STRAIN)
+  ]
 ) # grab all other strain calls that overlap
 
 key_cols <- c("CHROM", "start", "end", "STRAIN")

@@ -74,6 +74,12 @@ def var_thresh = [
     c_briggsae  : '11'
 ]
 
+def rpo_thresh = [
+    c_elegans   : '25',
+    c_tropicalis: '25',
+    c_briggsae  : '25'
+]
+
 def ref_gtcheck = [
     c_elegans   : '/vast/eande106/data/c_elegans/WI/concordance/20250625/gtcheck.txt',
     c_tropicalis: '/vast/eande106/data/c_tropicalis/WI/concordance/20250627/gtcheck.txt',
@@ -92,6 +98,7 @@ def inbam = params.bam ?: bam_dir[params.species]
 def refstrain = params.str ?: ref_str[params.species]
 def covthresh = params.pbt ?: cov_thresh[params.species]
 def vcthresh = params.vct ?: var_thresh[params.species]
+def rpothresh = params.rpo ?: rpo_thresh[params.species]
 def ingtcheck = params.gtcheck ?: ref_gtcheck[params.species]
 def ingroups = params.groups ?:ref_groups[params.species]
 
@@ -356,7 +363,7 @@ workflow {
 process GENERATE_SAMPLE_LIST_AND_WINDOWS {
     tag "${vcf_file.simpleName}"
     label 'process_low'
-    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    container 'library://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
     beforeScript   = 'module load singularity'
 
     input:
@@ -381,7 +388,7 @@ process GENERATE_WINDOWS_GROUP {
     tag "${group}"
 
     label 'process_low'
-    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    container 'library://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
@@ -402,7 +409,7 @@ process GENERATE_WINDOWS_GROUP {
 process COUNT_VARIANTS_PER_WINDOW {
     tag "${strain}_var"
     label 'process_med'
-    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    container 'library://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
@@ -430,7 +437,7 @@ process COUNT_VARIANTS_PER_WINDOW {
 process MOSDEPTH_COVERAGE {
     tag "${strain}_cov"
     label 'process_med'
-    container 'docker://docker.io/nicmoya/mosdepth_hdr_image:2026_07_24'
+    container 'library://docker.io/nicmoya/mosdepth_hdr_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
@@ -465,7 +472,7 @@ process MERGE_VARIANT_COUNTS {
     tag "merge_var"
     label 'process_low'
     publishDir "${params.output}/variants", mode: 'copy'
-    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    container 'library://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
@@ -484,7 +491,7 @@ process MERGE_THRESHOLDS {
     tag "merge_thresh"
     label 'process_low'
     publishDir "${params.output}/coverage", mode: 'copy'
-    container 'docker://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
+    container 'library://docker.io/nicmoya/bedvcf_hdr_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
@@ -501,14 +508,14 @@ process MERGE_THRESHOLDS {
 
 process CALL_HDRS {
     tag "call_hdrs_${group}"
-    label 'process_med'
+    label 'process_hi'
     publishDir(
         params.species == 'c_briggsae'
             ? "${params.output}/hdr_untransformed"
             : "${params.output}/hdrs",
         mode: 'copy'
     )
-    container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
+    container 'library://docker.io/nicmoya/hdr_r_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
@@ -536,7 +543,8 @@ process CALL_HDRS {
         ${refstrain} \
         ${group} \
         ${covthresh} \
-        ${vcthresh}
+        ${vcthresh} \
+        ${rpothresh}
 
     mv hdrs.tsv ${group}.hdrs.tsv
     """
@@ -545,7 +553,7 @@ process CALL_HDRS {
 process ALIGN_TO_TROPICAL {
     tag "${group}_vs_Tropical"
     label 'process_med'
-    container 'docker://docker.io/nicmoya/nucmer_hdr_image:2026_08_12'
+    container 'library://docker.io/nicmoya/nucmer_hdr_image:2026_08_12'
     //publishDir "${params.output}/alignments_raw", mode: 'copy'
     beforeScript = 'module load singularity'
 
@@ -602,7 +610,7 @@ process TRANSFORM_HDRS {
     tag "transform_coords_${group}"
     label 'process_med'
     //publishDir "${params.output}/transformed_coords", mode: 'copy'
-    container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
+    container 'library://docker.io/nicmoya/hdr_r_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
@@ -671,7 +679,7 @@ process GENERATE_TEMPLATE {
     tag "generate_template"
     label 'process_low'
     publishDir "${params.output}/template_sample_sheet", mode: 'copy'
-    container 'docker://docker.io/nicmoya/hdr_r_image:2026_07_24'
+    container 'library://docker.io/nicmoya/hdr_r_image:2026_07_24'
     beforeScript = 'module load singularity'
 
     input:
